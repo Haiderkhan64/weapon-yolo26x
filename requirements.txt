@@ -1,0 +1,34 @@
+# Weapon YOLO26x — pinned dependency list
+# Install: pip install -r requirements.txt
+
+# Core
+numpy==1.26.4
+torch>=2.0.0
+torchvision>=0.15.0
+
+# YOLO framework
+ultralytics>=8.3.0
+
+# Vision
+opencv-python-headless==4.10.0.84
+Pillow>=10.0
+
+# Utilities
+matplotlib>=3.7
+tqdm
+pyyaml
+scipy
+
+# Deployment & Web UI
+gradio>=4.0.0
+huggingface_hub>=0.22.0
+
+# Dev / CI (not required for inference or training)
+# Install via: pip install -r requirements.txt
+# ruff>=0.4.0
+# mypy>=1.10.0
+# pytest>=8.0.0
+
+# Note: TensorRT is NOT pip-installable.
+# Install from: https://docs.nvidia.com/deeplearning/tensorrt/install-guide/
+# Required version: TensorRT 10.x with CUDA 12.x
