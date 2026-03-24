@@ -1,0 +1,12 @@
+{
+  "model_pt": "model/best.pt",
+  "model_engine": "model/best_fp16.engine",
+  "conf_threshold": 0.35,
+  "iou_threshold": 0.45,
+  "imgsz": 1024,
+  "half": true,
+  "device": "cuda:0",
+  "map50_tta": 0.8913,
+  "map50_95_tta": 0.6836,
+  "notes": "Engine compiled on H100 with TensorRT 10.15.1. Re-export for other GPUs — see README."
+}

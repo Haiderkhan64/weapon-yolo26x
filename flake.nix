@@ -19,9 +19,9 @@
         packages = [ pythonEnv ];
 
         shellHook = ''
-          export PATH="${pythonEnv}/bin:$PATH"
           export HF_HOME="$PWD/.cache/huggingface"
-          echo "✓ huggingface-cli ready"
+          alias huggingface-cli="python3 -m huggingface_hub.commands.huggingface_cli"
+          echo "✓ ready — huggingface-cli aliased"
         '';
       };
     };

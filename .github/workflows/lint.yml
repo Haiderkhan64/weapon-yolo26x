@@ -1,0 +1,58 @@
+name: lint-and-test
+
+on:
+  push:
+    branches: ["main", "dev"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  quality:
+    name: Lint & type-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install lint tools
+        run: pip install ruff mypy
+
+      - name: Ruff — lint
+        run: ruff check . --select E,W,F,I,UP --ignore E501
+
+      - name: Mypy — type check
+        run: |
+          mypy train.py \
+               inference/infer.py \
+               inference/infer_trt.py \
+               inference/_common.py \
+               config/validate.py \
+               upload_to_hf.py \
+               --ignore-missing-imports \
+               --strict-optional \
+               --no-error-summary
+
+  test:
+    name: Smoke tests (CPU-only)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pytest
+
+      - name: Run smoke tests
+        run: pytest tests/ -v --tb=short
