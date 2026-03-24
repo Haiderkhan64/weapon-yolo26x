@@ -1,5 +1,5 @@
 """
-app.py — Gradio Space for weapon-yolo26x
+app.py — Gradio Space for weapon-yolo26x (Video Edition)
 Deploy at: https://huggingface.co/spaces/HaiderKhan6410/weapon-yolo26x-demo
 """
 
@@ -7,8 +7,11 @@ from __future__ import annotations
 
 import os
 import time
+import tempfile
 from pathlib import Path
+from collections import defaultdict
 
+import cv2
 import gradio as gr
 import torch
 from huggingface_hub import hf_hub_download
@@ -32,7 +35,7 @@ model = YOLO(_model_path)
 model.to(DEVICE)
 print("Model ready.")
 
-# ── class colours (matches YOLO26x class order) ───────────────────────────────
+# ── class labels ──────────────────────────────────────────────────────────────
 
 CLASS_LABELS = {
     "Blunt_Weapon":  "🪓",
@@ -46,82 +49,134 @@ CLASS_LABELS = {
 
 # ── inference ─────────────────────────────────────────────────────────────────
 
-def detect(
-    image:     Image.Image,
-    conf:      float,
-    iou:       float,
-    show_conf: bool,
-) -> tuple[Image.Image, str]:
+def detect_video(
+    video_path: str,
+    conf:       float,
+    iou:        float,
+    show_conf:  bool,
+    frame_skip: int,
+) -> tuple[str, str]:
     """
-    Run inference on a PIL image.
+    Run inference on every Nth frame of a video file.
 
     Returns:
-        annotated image, markdown summary string
+        path to annotated output video, markdown summary string
     """
-    if image is None:
-        return None, "⚠️ No image provided."
+    if video_path is None:
+        return None, "⚠️ No video provided."
 
-    t0      = time.perf_counter()
-    results = model(image, conf=conf, iou=iou, imgsz=IMGSZ, verbose=False)
-    elapsed = time.perf_counter() - t0
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        return None, "❌ Could not open video file."
 
-    r     = results[0]
-    boxes = r.boxes
+    fps    = cap.get(cv2.CAP_PROP_FPS) or 25.0
+    width  = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    total  = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
-    # Annotated frame
-    annotated = Image.fromarray(r.plot())
+    # Output temp file
+    out_file = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
+    out_path = out_file.name
+    out_file.close()
 
-    # Build detection summary
-    if boxes is None or len(boxes) == 0:
-        summary = "**No weapons detected.**"
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    writer = cv2.VideoWriter(out_path, fourcc, fps, (width, height))
+
+    all_counts: dict[str, list[float]] = defaultdict(list)
+    frame_idx   = 0
+    processed   = 0
+    total_time  = 0.0
+
+    last_annotated = None  # reuse annotation on skipped frames
+
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+
+        if frame_idx % max(1, frame_skip) == 0:
+            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            pil = Image.fromarray(rgb)
+
+            t0      = time.perf_counter()
+            results = model(pil, conf=conf, iou=iou, imgsz=IMGSZ, verbose=False)
+            total_time += time.perf_counter() - t0
+
+            r     = results[0]
+            boxes = r.boxes
+            annotated_rgb = r.plot()
+            last_annotated = cv2.cvtColor(annotated_rgb, cv2.COLOR_RGB2BGR)
+
+            if boxes is not None:
+                names = r.names
+                for box in boxes:
+                    cls_id   = int(box.cls[0])
+                    conf_val = float(box.conf[0])
+                    label    = names.get(cls_id, f"class_{cls_id}")
+                    all_counts[label].append(conf_val)
+
+            processed += 1
+
+        writer.write(last_annotated if last_annotated is not None else frame)
+        frame_idx += 1
+
+    cap.release()
+    writer.release()
+
+    # Re-encode with H.264 for browser compatibility (if ffmpeg available)
+    h264_path = out_path.replace(".mp4", "_h264.mp4")
+    ret_code = os.system(
+        f'ffmpeg -y -i "{out_path}" -vcodec libx264 -acodec aac "{h264_path}" -loglevel quiet'
+    )
+    final_path = h264_path if ret_code == 0 and Path(h264_path).exists() else out_path
+
+    # Build summary
+    avg_ms = (total_time / processed * 1000) if processed > 0 else 0.0
+    lines  = [
+        f"**Video stats:** {total} frames · {processed} processed "
+        f"(every {frame_skip} frame{'s' if frame_skip > 1 else ''}) · "
+        f"avg inference `{avg_ms:.1f} ms` on {DEVICE.upper()}\n"
+    ]
+
+    if not all_counts:
+        lines.append("**No weapons detected** across the entire video.")
     else:
-        counts: dict[str, list[float]] = {}
-        names  = r.names  # {int: str}
-
-        for box in boxes:
-            cls_id  = int(box.cls[0])
-            conf_val = float(box.conf[0])
-            label   = names.get(cls_id, f"class_{cls_id}")
-            counts.setdefault(label, []).append(conf_val)
-
-        lines = ["**Detections:**\n"]
-        for label, confs in sorted(counts.items()):
-            icon  = CLASS_LABELS.get(label, "•")
-            count = len(confs)
-            avg_c = sum(confs) / count
+        lines.append("**Aggregated detections (all frames):**\n")
+        for label, confs in sorted(all_counts.items()):
+            icon    = CLASS_LABELS.get(label, "•")
+            count   = len(confs)
+            avg_c   = sum(confs) / count
             conf_str = f"  avg conf: `{avg_c:.2f}`" if show_conf else ""
-            lines.append(f"- {icon} **{label}** × {count}{conf_str}")
+            lines.append(f"- {icon} **{label}** × {count} detections{conf_str}")
 
-        lines.append(f"\n_Inference: `{elapsed * 1000:.1f} ms` on {DEVICE.upper()}_")
-        summary = "\n".join(lines)
-
-    return annotated, summary
+    summary = "\n".join(lines)
+    return final_path, summary
 
 
 # ── examples ──────────────────────────────────────────────────────────────────
 
 EXAMPLES_DIR = Path("examples")
 examples = [
-    [str(p), CONF_DEFAULT, IOU_DEFAULT, True]
-    for p in sorted(EXAMPLES_DIR.glob("*.jpg"))
+    [str(p), CONF_DEFAULT, IOU_DEFAULT, True, 2]
+    for p in sorted(EXAMPLES_DIR.glob("*.mp4"))
 ] if EXAMPLES_DIR.exists() else []
 
 
 # ── UI ────────────────────────────────────────────────────────────────────────
 
-with gr.Blocks(theme=gr.themes.Soft(), title="Weapon Detection YOLO26x") as demo:
+with gr.Blocks(theme=gr.themes.Soft(), title="Weapon Detection YOLO26x — Video") as demo:
     gr.Markdown(
         """
-# 🔫 Weapon Detection — YOLO26x
+# 🔫 Weapon Detection — YOLO26x · Video Mode
 **Multi-phase trained** on 104,697 images · mAP@50 = **0.8913** · 7 classes
 
-> Upload an image to detect weapons. Adjust confidence and IoU thresholds below.
+> Upload a video to detect weapons frame-by-frame. Adjust thresholds and frame-skip below.
         """
     )
 
     with gr.Row():
         with gr.Column(scale=1):
-            inp_image = gr.Image(type="pil", label="Input image")
+            inp_video = gr.Video(label="Input video", sources=["upload"])
 
             with gr.Accordion("⚙️ Detection settings", open=False):
                 inp_conf = gr.Slider(
@@ -134,6 +189,11 @@ with gr.Blocks(theme=gr.themes.Soft(), title="Weapon Detection YOLO26x") as demo
                     label="IoU (NMS) threshold",
                     info="Lower → fewer overlapping boxes",
                 )
+                inp_frame_skip = gr.Slider(
+                    minimum=1, maximum=10, value=2, step=1,
+                    label="Frame skip (process every Nth frame)",
+                    info="Higher → faster processing, lower temporal resolution",
+                )
                 inp_show_conf = gr.Checkbox(
                     value=True, label="Show confidence scores in summary"
                 )
@@ -141,29 +201,22 @@ with gr.Blocks(theme=gr.themes.Soft(), title="Weapon Detection YOLO26x") as demo
             btn_detect = gr.Button("🔍 Detect", variant="primary")
 
         with gr.Column(scale=1):
-            out_image   = gr.Image(label="Detection result", type="pil")
+            out_video   = gr.Video(label="Detection result", autoplay=True)
             out_summary = gr.Markdown()
 
     btn_detect.click(
-        fn      = detect,
-        inputs  = [inp_image, inp_conf, inp_iou, inp_show_conf],
-        outputs = [out_image, out_summary],
-    )
-
-    # Auto-run on image upload as well
-    inp_image.change(
-        fn      = detect,
-        inputs  = [inp_image, inp_conf, inp_iou, inp_show_conf],
-        outputs = [out_image, out_summary],
+        fn      = detect_video,
+        inputs  = [inp_video, inp_conf, inp_iou, inp_show_conf, inp_frame_skip],
+        outputs = [out_video, out_summary],
     )
 
     if examples:
         gr.Examples(
-            examples        = examples,
-            inputs          = [inp_image, inp_conf, inp_iou, inp_show_conf],
-            outputs         = [out_image, out_summary],
-            fn              = detect,
-            cache_examples  = True,
+            examples       = examples,
+            inputs         = [inp_video, inp_conf, inp_iou, inp_show_conf, inp_frame_skip],
+            outputs        = [out_video, out_summary],
+            fn             = detect_video,
+            cache_examples = True,
         )
 
     gr.Markdown(
