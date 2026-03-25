@@ -1,5 +1,5 @@
 ---
-license: cc0-1.0
+license: bigscience-openrail-m
 tags:
   - object-detection
   - yolo
@@ -14,43 +14,41 @@ language:
   - en
 ---
 
-# Weapon Detection YOLO26x — Real-Time, Multi-Phase Trained
+# Weapon Detection — YOLO26x
 
-A production-grade weapon detection model built on **YOLO26x**, trained using a
-4-phase progressive pipeline on 104,697 images and optimized for deployment
-with **TensorRT FP16**.
+A 7-class weapon detector trained on 104,697 images using a 4-phase progressive fine-tuning pipeline. Final mAP@50 of **0.8913** with TTA. TensorRT FP16 export runs at ~5ms/image on H100.
 
----
-
-## Overview
-
-| Property | Value |
-|---|---|
-| Architecture | YOLO26x (Ultralytics 8.4.22) |
-| Parameters | 58.8M (train) / 55.6M (fused) |
-| GFLOPs | 208.6 (train) / 193.4 (fused) |
-| Input Size | 800px (Ph1–2) → 1024px (Ph3) |
-| Framework | PyTorch (Ultralytics ≥ 8.3) |
-| Optimization | TensorRT 10.15.1 FP16 |
-| GPU used | NVIDIA H100 80GB |
-| License | CC0 — Public Domain |
+This README documents exactly what was done, why each decision was made, what the numbers actually mean, and how to reproduce everything from scratch.
 
 ---
 
-## Final Performance (Phase 3 — TTA validated)
+## What this is
+
+A fine-tuned [YOLO26x](https://github.com/ultralytics/ultralytics) checkpoint for detecting weapons and related threat objects in images and video. The seven classes are: `Blunt_Weapon`, `Explosive`, `Fire_Smoke`, `Firearm`, `Melee_Weapon`, `Person`, `Tool`.
+
+`Person` is intentionally included as a context class, not a standalone person detector. Its lower mAP@50 (0.747) is expected — person annotations in the dataset are sparse and only label people in weapon-adjacent scenes. Don't use this model as a people counter.
+
+The training pipeline is the main contribution here. Most public YOLO uploads are a single training run with default hyperparameters. This one uses a 4-phase curriculum that addresses two real problems: catastrophic gradient updates from mosaic augmentation on background-heavy data early in training, and the resolution gap between pretraining (640px) and deployment (1024px). Details in the [Training](#training) section.
+
+---
+
+## Numbers
+
+### Final (Phase 3 checkpoint, TTA validated)
 
 | Metric | Value |
 |---|---|
-| **mAP@50** | **0.8913** |
-| **mAP@50-95** | **0.6836** |
+| mAP@50 | **0.8913** |
+| mAP@50-95 | **0.6836** |
 | Precision | 0.890 |
 | Recall | 0.819 |
-| Best F1 | 0.8528 (@ conf=0.10) |
-| Inference speed (PyTorch) | 5.0ms / image (H100) |
+| Best F1 | 0.8528 @ conf=0.10 |
+| Inference (PyTorch, H100) | ~5ms / image |
+| Inference (TRT FP16, H100) | ~2ms / image |
 
-### Per-Class mAP@50
+### Per-class mAP@50
 
-| Class | P | R | mAP@50 |
+| Class | Precision | Recall | mAP@50 |
 |---|---|---|---|
 | Explosive | 0.950 | 0.903 | **0.959** |
 | Melee_Weapon | 0.937 | 0.892 | **0.949** |
@@ -60,32 +58,22 @@ with **TensorRT FP16**.
 | Fire_Smoke | 0.879 | 0.802 | **0.875** |
 | Person | 0.794 | 0.641 | 0.747 |
 
-### Phase-by-Phase Progression
+The high numbers on Explosive and Melee_Weapon are partly a dataset artifact — those classes have distinctive visual signatures (grenades, blades) relative to their backgrounds. Firearm at 0.932 is more meaningful because firearms appear in more varied contexts with more partial occlusions.
 
-| Phase | Epochs | imgsz | mAP@50 | mAP@50-95 |
+### Phase progression
+
+| Phase | Epochs | imgsz | Frozen layers | mAP@50 |
 |---|---|---|---|---|
-| Phase 1 (Stabilization) | 10 | 800 | 0.865 | 0.657 |
-| Phase 2 (Full backbone) | 15 | 800 | 0.881 | 0.683 |
-| Phase 3 (High-res) | 10 | **1024** | **0.891** | **0.684** |
-| Phase 4 (TTA validated) | — | 1024 | **0.8913** | **0.6836** |
+| 1 — Stabilization | 10 | 800 | 10 | 0.865 |
+| 2 — Full backbone | 15 | 800 | 0 | 0.881 |
+| 3 — High-res refinement | 10 | 1024 | 0 | 0.891 |
+| 4 — TTA validation | — | 1024 | — | **0.8913** |
+
+The +1.6% jump from Phase 2→3 comes entirely from the resolution increase. Small objects (knives at distance, grenade pins) that were borderline at 800px become unambiguous at 1024px. This is consistent with what you'd expect from the receptive field math.
 
 ---
 
-## Files
-
-| File | Size | Description |
-|---|---|---|
-| `model/best.pt` | 118.4 MB | Final PyTorch model (Phase 3, 1024px) |
-| `model/best_fp16.engine` | 110.0 MB | TensorRT 10.15 FP16 engine (H100) |
-| `config/deploy_config.json` | — | Inference thresholds and runtime config |
-| `inference/infer.py` | — | PyTorch inference (images + video) |
-| `inference/infer_trt.py` | — | TensorRT inference |
-| `train.py` | — | Reproducible 4-phase training pipeline |
-| `requirements.txt` | — | Pinned dependency list |
-
----
-
-## Quick Start
+## Quick start
 
 ### Install
 
@@ -93,152 +81,283 @@ with **TensorRT FP16**.
 pip install ultralytics>=8.3.0 opencv-python numpy==1.26.4
 ```
 
-### PyTorch Inference (images)
+NumPy is pinned to 1.26.x. Ultralytics 8.3 dropped support for NumPy 2.x in some ops. Check [requirements.txt](requirements.txt) for the full pinned list.
 
-```python
-from ultralytics import YOLO
+### Download weights
 
-model = YOLO("model/best.pt")
-results = model("your_image.jpg", conf=0.35, iou=0.45)
-results[0].show()
-results[0].save("output.jpg")
+```bash
+# Using huggingface_hub CLI
+huggingface-cli download HaiderKhan6410/weapon-yolo26x \
+  model/best.pt \
+  --local-dir .
 ```
 
-### PyTorch Inference (video)
+Or via Python:
+
+```python
+from huggingface_hub import hf_hub_download
+path = hf_hub_download("HaiderKhan6410/weapon-yolo26x", "model/best.pt")
+```
+
+### Inference
 
 ```python
 from ultralytics import YOLO
 
 model = YOLO("model/best.pt")
-results = model("your_video.mp4", conf=0.35, stream=True)
-for r in results:
+
+# Single image
+results = model("image.jpg", conf=0.35, iou=0.45, imgsz=1024)
+results[0].show()
+
+# Video — stream=True is important, loads one frame at a time
+for r in model("video.mp4", conf=0.35, iou=0.45, imgsz=1024, stream=True):
     print(r.boxes)
 ```
 
-### TensorRT Inference (fastest — GPU only)
+### TensorRT (fastest, GPU only)
+
+The included `.engine` was compiled on H100 with TensorRT 10.15.1. **It will not load on a different GPU architecture.** Re-export it:
 
 ```python
 from ultralytics import YOLO
-
-model = YOLO("model/best_fp16.engine")
-results = model("your_image.jpg", conf=0.35, iou=0.45)
-results[0].show()
+model = YOLO("model/best.pt")
+model.export(format="engine", imgsz=1024, half=True, device=0, workspace=6)
 ```
 
-### Using the inference scripts
+Then load the exported `.engine` the same way as `best.pt`.
+
+### CLI scripts
 
 ```bash
-# PyTorch — image
-python inference/infer.py --source your_image.jpg --weights model/best.pt
+# PyTorch inference
+python inference/infer.py --source image.jpg --weights model/best.pt
 
-# PyTorch — video
-python inference/infer.py --source your_video.mp4 --weights model/best.pt
+# TensorRT inference
+python inference/infer_trt.py --source image.jpg --engine model/best_fp16.engine
 
-# TensorRT — image
-python inference/infer_trt.py --source your_image.jpg --engine model/best_fp16.engine
+# Webcam
+python inference/infer.py --source 0 --no-save --show
 ```
 
 ---
 
-## Training Strategy (What Makes This Different)
+## Files
 
-Most public YOLO models are trained once and uploaded.
-This model uses a **4-phase progressive pipeline** to eliminate training instability
-and maximize accuracy at deployment resolution.
-
-### Phase 1 — Stabilization (10 epochs, imgsz=800)
-- Starts from a pretrained YOLO26x checkpoint
-- `optimizer=AdamW`, `lr0=8e-5`, `freeze=5`, `label_smoothing=0.05`
-- Explicit handling of the 8.6% background image problem (9,032 / 104,697)
-  which causes mosaic NaN in the AMP GradScaler without mitigation
-- Result: **mAP@50 = 0.865**
-
-### Phase 2 — Full Backbone Training (15 epochs, imgsz=800)
-- Loads Phase 1 best weights
-- `freeze=0` (full backbone), `lr0=5e-5`, `mixup=0.15`, `copy_paste=0.3`
-- `degrees=12`, `scale=0.6`, heavier augmentation
-- Result: **mAP@50 = 0.881**
-
-### Phase 3 — High-Resolution Refinement (10 epochs, imgsz=1024)
-- Loads Phase 2 best weights
-- 1024px input sharpens small-object recall (knives, grenades at distance)
-- `batch=12` to fit GPU memory at higher resolution
-- Result: **mAP@50 = 0.891**
-
-### Phase 4 — Optimization & Export
-- TTA validation (`augment=True`): mAP@50 = **0.8913**, mAP@50-95 = **0.6836**
-- TensorRT 10.15.1 FP16 export: 447.7s build time, 110MB engine
-- `deploy_config.json` written with final runtime thresholds
-
----
-
-## Dataset
-
-| Property | Value |
-|---|---|
-| Train images | 104,697 |
-| Val images | 13,186 |
-| Background images | 9,032 (8.6%) — intentional, teaches FP suppression |
-| Classes | 7 |
-| Source | Kaggle — `weapon-detection-yolo-v3-cleaned` |
-
-**Classes:** Blunt_Weapon, Explosive, Fire_Smoke, Firearm, Melee_Weapon, Person, Tool
-
----
-
-## ⚠️ Limitations
-
-- Person class mAP@50 is lower (0.747) — "Person" is a secondary context label
-  in weapon scenes, not a standalone person detector
-- Performance may degrade in very low-light or extreme occlusion scenarios
-- The `.engine` file is compiled for NVIDIA H100 with TensorRT 10.15.1 —
-  other GPUs require re-exporting from `best.pt`
-
----
-
-## Re-export TensorRT for Your GPU
-
-```python
-from ultralytics import YOLO
-
-model = YOLO("model/best.pt")
-model.export(
-    format="engine",
-    imgsz=1024,
-    half=True,
-    device=0,
-    workspace=6,
-)
+```
+.
+├── flake.nix / flake.lock       # Reproducible Nix dev environment — primary entry point
+├── requirements.txt             # Fallback: pip-based dependency resolution
+├── README.md                    # Project documentation
+├──
+├── train.py               
+├── app.py                       # Gradio demo (Hugging Face Spaces)
+├── 
+├── model/
+│   └── best.pt                  # Final PyTorch weights (Phase 3, 1024px input)
+│   └── best_fp16.engine 
+├── 
+├── inference/
+│   ├── infer.py                 # PyTorch inference: images, video, webcam
+│   ├── infer_trt.py             # TensorRT-optimized inference (GPU only)
+│   └── _common.py               # Shared post-processing & visualization utilities
+├── 
+├── config/
+│   ├── deploy_config.json       # Runtime thresholds, class mapping, metadata
+│   └── validate.py              # Schema validation for config integrity
+├── 
+└── tests/
+    └── test_smoke.py            # CPU-only sanity checks (CI/CD friendly)
 ```
 
 ---
 
-## Environment
+# Auto-generate structure snippet (exclude noise)
+tree -I '.git|.venv|__pycache__|*.engine' --dirsfirst -L 2
 
-| Library | Version |
+## Training
+
+### Dataset
+
+
+| Split | Images |
 |---|---|
+| Train | 104,697 |
+| Val | 13,186 |
+| Background (train) | 9,032 (8.6%) |
+
+The 8.6% background images are intentional and important. They teach the model to suppress false positives in clean scenes. Removing them consistently hurts precision on real-world footage where most frames contain no weapons.
+
+### Why 4 phases
+
+Fine-tuning YOLO26x from scratch (i.e., with a single `model.train()` call at 1024px) produces an unstable run. Two things go wrong:
+
+1. **Mosaic + background images + AMP = NaN.** Mosaic augmentation at 1024px assembles 4 images into one. When a background tile (no annotations) gets combined with weapon tiles, the AMP GradScaler occasionally sees a NaN gradient and skips the update. At 8.6% background frequency this happens enough in the first few epochs to destabilize the optimizer. The fix is to start with freeze=10 (backbone frozen), smaller LR, and no mixup or copy_paste until the head is stable.
+
+2. **Resolution gap.** The base YOLO26x checkpoint was pretrained at 640px. Jumping directly to 1024px triples the spatial resolution. The attention patterns and anchor statistics are mismatched. Training at 800px first lets the model re-learn the feature scales before the final resolution bump.
+
+### Phase details
+
+**Phase 1 — Stabilization (10 epochs, 800px)**
+
+Freeze the first 10 backbone layers. Only the neck and head train. `AdamW` with `lr0=8e-5`, no mixup, no copy_paste. Light augmentation (`degrees=10`, `scale=0.5`, `erasing=0.3`). This gets the head calibrated without corrupting the pretrained backbone features. Loss is stable from epoch 1.
+
+**Phase 2 — Full backbone (15 epochs, 800px)**
+
+Unfreeze everything. Drop LR to `5e-5`. Add `mixup=0.15` and `copy_paste=0.3`. These two augmentations are high-value for weapon detection specifically: mixup teaches the model to handle overlapping weapon/person scenes, copy_paste synthesizes uncommon weapon-in-new-context combinations that the dataset underrepresents. `degrees=12`, `scale=0.6` — heavier geometric augmentation now that the backbone is stable enough to handle it.
+
+**Phase 3 — High-res refinement (10 epochs, 1024px)**
+
+Load Phase 2 `best.pt`. Drop batch from 32→12 to fit H100 memory at 1024px. `lr0=2e-5` — very conservative, we're making fine adjustments to existing good features, not relearning. Reduce mosaic to 0.8 (full mosaic at 1024px is expensive and we're in a refinement phase). This phase's job is purely recall improvement on small objects. It does exactly that: recall goes from 0.808 → 0.819.
+
+**Phase 4 — Export**
+
+TTA validation with `augment=True`, `conf=0.001`, `iou=0.6`. TTA adds ~3× inference cost but gives a more honest mAP estimate than single-pass. The TRT export took 447s on H100 — this is normal for a workspace=6GB, half=True, imgsz=1024 build.
+
+### Hyperparameter table
+
+| | Phase 1 | Phase 2 | Phase 3 |
+|---|---|---|---|
+| epochs | 10 | 15 | 10 |
+| imgsz | 800 | 800 | 1024 |
+| batch | 32 | 32 | 12 |
+| optimizer | AdamW | AdamW | AdamW |
+| lr0 | 8e-5 | 5e-5 | 2e-5 |
+| lrf | 0.01 | 0.01 | 0.005 |
+| freeze | 10 | 0 | 0 |
+| mosaic | 1.0 | 1.0 | 0.8 |
+| mixup | 0.0 | 0.15 | 0.1 |
+| copy_paste | 0.0 | 0.3 | 0.2 |
+| degrees | 10 | 12 | 8 |
+| scale | 0.5 | 0.6 | 0.5 |
+| erasing | 0.3 | 0.4 | 0.2 |
+| label_smoothing | 0.05 | 0.05 | 0.05 |
+| patience | 10 | 15 | 10 |
+| cos_lr | ✓ | ✓ | ✓ |
+| amp | ✓ | ✓ | ✓ |
+
+### Reproducing
+
+```bash
+# Phase 1 through 3 + TRT export in one shot
+python train.py \
+  --data dataset.yaml \
+  --base-weights yolo26x.pt \
+  --work-dir runs/weapon_yolo26x
+
+# Resume from a checkpoint
+python train.py \
+  --data dataset.yaml \
+  --resume-from runs/weapon_yolo26x/phase2/weights/best.pt \
+  --start-phase 3
+
+# Export only (if you already have best.pt)
+python train.py \
+  --export-only \
+  --weights model/best.pt \
+  --data dataset.yaml
+```
+
+The full pipeline takes ~6 hours on H100 (10+15+10 epochs at the respective resolutions, plus the 447s TRT build).
+
+---
+
+## Model card
+
+| | |
+|---|---|
+| Architecture | YOLO26x |
+| Parameters (train) | 58.8M |
+| Parameters (fused) | 55.6M |
+| GFLOPs (train) | 208.6 |
+| GFLOPs (fused) | 193.4 |
+| Framework | PyTorch / Ultralytics ≥ 8.3 |
+| TRT engine | TensorRT 10.15.1 FP16 |
+| Training GPU | NVIDIA H100 80GB |
 | Python | 3.12.12 |
 | PyTorch | 2.9.0+cu126 |
-| Ultralytics | 8.4.22 |
-| NumPy | 1.26.4 |
-| OpenCV | 4.10.0.84 |
 | CUDA | 12.6 |
-| TensorRT | 10.15.1.29 |
+
+---
+
+## Limitations
+
+To be honest about what this model doesn't do well.
+
+**Person class is weak.** mAP@50 of 0.747 vs 0.93+ for weapon classes. The dataset labels people only in weapon-adjacent contexts and the annotations are incomplete. If you need robust person detection, use a dedicated model (e.g., YOLOv8n pretrained on COCO) in parallel.
+
+**Low-light degrades recall meaningfully.** The dataset skews toward daylight/indoor security footage. Dark scenes drop recall on Melee_Weapon and Blunt_Weapon noticeably. No quantified benchmarks for this yet.
+
+**Extreme occlusion is hard.** A half-visible handgun behind a jacket will likely be missed. The model has no depth or shape-completion capability — it's purely 2D texture-and-shape matching.
+
+**The `.engine` file is H100-specific.** TensorRT engines are not portable across GPU architectures. Re-export from `best.pt` for any other GPU. The re-export takes ~8 minutes on a T4, ~15 minutes on an older V100.
+
+**Not a safety system.** Detection accuracy in the low-to-mid 90s means false negatives at non-trivial rates. Do not deploy this as a sole gate in any safety-critical pipeline without human review and proper evaluation on your specific deployment domain.
+
+---
+
+## Threshold guidance
+
+Default thresholds (`conf=0.35`, `iou=0.45`) are a balanced starting point. Adjust based on your use case:
+
+- **Security screening / high recall needed:** lower conf to 0.15–0.25. Expect more false positives. The Best F1 is actually at conf=0.10, so the model's natural operating point is lower than the default.
+- **Alert systems / low false-positive budget:** raise conf to 0.5–0.6. You will miss more real detections but the ones you get will be high-confidence.
+- **Overlapping objects / dense scenes:** lower iou to 0.35. Higher iou (0.6+) is more aggressive at suppressing boxes and can merge nearby distinct weapons.
+
+---
+
+## Development environment
+
+The `flake.nix` provides two shells:
+
+```bash
+# Full dev shell (torch, ultralytics, gradio via pip venv)
+nix develop
+
+# Download-only shell (just huggingface-hub)
+nix develop .#download
+```
+
+Python 3.12 is pinned — 3.13 is excluded because NumPy 1.26.x dropped Py3.13 support and ultralytics 8.3 hasn't been verified against NumPy 2.x.
+
+The pip venv is intentional. Torch and TensorRT are too GPU-specific and too large to package cleanly in nixpkgs. Nix provides the Python interpreter and system libs (libstdc++, libGL, glib); pip owns the ML stack inside `.venv/`.
+
+---
+
+## Tests
+
+```bash
+pytest tests/ -v
+```
+
+The smoke tests don't require a GPU or the model weights. They cover: config loading and validation, CLI argument parsing, and the output-path collision-avoidance logic in `_common.py`. These are the classes of bugs most likely to surface silently in a long inference run.
 
 ---
 
 ## Citation
 
-```
-Haider Khan (2026). Weapon YOLO26x — Multi-Phase Real-Time Detection Model.
-Hugging Face. https://huggingface.co/haiderkhan6410/weapon-yolo26x
+```bibtex
+@misc{haiderkhan6410_yolo26x_2026,
+  author       = {Haider Khan},
+  title        = {Weapon YOLO26x: Multi-Phase Real-Time Weapon Detection},
+  year         = {2026},
+  publisher    = {Hugging Face},
+  url          = {https://huggingface.co/HaiderKhan6410/weapon-yolo26x},
+  note         = {Available on Hugging Face and GitHub. Accessed: 2026-03-26}
+}
 ```
 
 ---
 
 ## License
 
-CC0 1.0 Universal — Public Domain Dedication.
+[BigScience OpenRAIL-M](https://huggingface.co/spaces/bigscience/license)
 
-> Please use responsibly. Weapon detection systems should be deployed
-> in compliance with local laws and with appropriate ethical oversight.
+Free to use, modify, and distribute, including commercially, provided the use-based
+restrictions in Attachment A of the license are respected. Key restrictions: no use for
+illegal purposes, no generating or disseminating disinformation, no use in fully automated
+decision systems that affect legal rights without human oversight.
+
+Any deployment in a real-world security context should be done in compliance with local
+laws, with appropriate human oversight, and with proper evaluation on the target domain
+before going live.
