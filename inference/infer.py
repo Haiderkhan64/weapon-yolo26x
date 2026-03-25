@@ -20,9 +20,8 @@ import time
 from pathlib import Path
 
 import torch
-from ultralytics import YOLO
-
 from _common import log_summary, process_results, setup_logging
+from ultralytics import YOLO
 
 # ── defaults ──────────────────────────────────────────────────────────────────
 DEFAULT_WEIGHTS = Path(__file__).parent.parent / "model" / "best.pt"
