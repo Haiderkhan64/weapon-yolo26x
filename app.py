@@ -655,7 +655,7 @@ examples = [
 
 HEADER_HTML = f"""
 <div class="header-wrap">
-  <div class="header-title">YOLO26x Threat <span>Detection</span></div>
+  <div class="header-title">YOLO26x <span>Threat Detection</span></div>
   <div class="header-sub">YOLO26X · mAP@50 = 0.8913 · 104,697 TRAINING IMAGES · 7 CLASSES</div>
   <div class="header-badges">
     <div class="header-badge-warn">
