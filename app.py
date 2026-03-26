@@ -1,9 +1,7 @@
-"""
-app.py — Gradio Space for weapon-yolo26x (Video Edition) — SENIOR EDITION
-Deploy at: https://huggingface.co/spaces/HaiderKhan6410/weapon-yolo26x-demo
-"""
-
 from __future__ import annotations
+
+import os
+os.environ['YOLO_CONFIG_DIR'] = '/tmp/Ultralytics'
 
 import subprocess
 import tempfile
@@ -699,15 +697,7 @@ FOOTER_HTML = """
 </div>
 """
 
-with gr.Blocks(
-    theme=gr.themes.Base(
-        primary_hue="red",
-        neutral_hue="zinc",
-        font=gr.themes.GoogleFont("Space Mono"),
-    ),
-    css=CUSTOM_CSS,
-    title="Weapon Detection YOLO26x",
-) as demo:
+with gr.Blocks(title="Weapon Detection YOLO26x") as demo:
 
     gr.HTML(HEADER_HTML)
 
@@ -790,4 +780,12 @@ with gr.Blocks(
 # ── entry point ───────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    demo.launch()
+    demo.launch(
+        ssr_mode=False,
+        theme=gr.themes.Base(
+            primary_hue="red",
+            neutral_hue="zinc",
+            font=gr.themes.GoogleFont("Space Mono"),
+        ),
+        css=CUSTOM_CSS,
+    )
