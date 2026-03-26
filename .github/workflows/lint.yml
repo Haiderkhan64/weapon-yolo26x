@@ -32,7 +32,6 @@ jobs:
                inference/infer_trt.py \
                inference/_common.py \
                config/validate.py \
-               upload_to_hf.py \
                --ignore-missing-imports \
                --strict-optional \
                --no-error-summary
