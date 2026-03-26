@@ -1,16 +1,4 @@
 ---
-# BLOCK 1: Spaces Configuration (REQUIRED for HF Spaces)
-title: Weapon Yolo26x Demo
-emoji: ⚡
-colorFrom: green
-colorTo: indigo
-sdk: gradio
-sdk_version: "6.9.0"
-app_file: app.py
-pinned: false
----
-
----
 license: bigscience-openrail-m
 tags:
   - object-detection
@@ -36,7 +24,7 @@ This README documents exactly what was done, why each decision was made, what th
 
 ## What this is
 
-A fine-tuned [YOLO26x](https://github.com/ultralytics/ultralytics) checkpoint for detecting weapons and related threat objects in images and video. The seven classes are: `Blunt_Weapon`, `Explosive`, `Fire_Smoke`, `Firearm`, `Melee_Weapon`, `Person`, `Tool`.
+A fine-tuned [YOLO26x](https://github.com/ultralytics/ultralytics) checkpoint for detecting weapons and related threat objects in images and video. The seven classes are: `Blunt Weapon`, `Explosive`, `Fire Smoke`, `Firearm`, `Melee_Weapon`, `Person`, `Tool`.
 
 `Person` is intentionally included as a context class, not a standalone person detector. Its lower mAP@50 (0.747) is expected — person annotations in the dataset are sparse and only label people in weapon-adjacent scenes. Don't use this model as a people counter.
 
@@ -44,18 +32,36 @@ The training pipeline is the main contribution here. Most public YOLO uploads ar
 
 ---
 
-## 🎥 Demo
+## Live Demo
 
-### Original footage
-[![Input](https://img.youtube.com/vi/1PXWfTKSMkM/0.jpg)](https://www.youtube.com/shorts/1PXWfTKSMkM)
+[![Open in Spaces](https://img.shields.io/badge/🤗%20Open%20in%20Spaces-weapon--yolo26x--demo-yellow)](https://huggingface.co/spaces/HaiderKhan6410/weapon-yolo26x-demo)
 
-### YOLO26x detection output
-https://github.com/user-attachments/assets/ffa2e47d-bd3b-4e57-be44-c952fb0af09d
+Upload a video, adjust confidence and IoU thresholds, get annotated output with a per-class breakdown. No GPU, no install.
+
+**7 classes:** Blunt Weapon · Explosive · Fire/Smoke · Firearm · Melee Weapon · Person · Tool
+
+> **Speed warning:** The Space runs CPU-only (free HF tier). Expect 1–5s/image. Not a model issue — re-export and run locally if you need real throughput.
+
+| Environment | Latency |
+|---|---|
+| HF Space (CPU, free tier) | ~1–5s / image |
+| PyTorch · NVIDIA GPU | ~5ms / image |
+| TensorRT FP16 · H100 | ~2ms / image |
+
+For real-time use, see [Quick Start](#quick-start).
 
 ---
 
+## Example Output
+
+**Input footage**
+[![Input](https://img.youtube.com/vi/1PXWfTKSMkM/0.jpg)](https://www.youtube.com/shorts/1PXWfTKSMkM)
+
+**YOLO26x detections**
+https://github.com/user-attachments/assets/ffa2e47d-bd3b-4e57-be44-c952fb0af09d
 
 
+---
 
 
 
@@ -176,33 +182,27 @@ python inference/infer.py --source 0 --no-save --show
 ```
 .
 ├── flake.nix / flake.lock       # Reproducible Nix dev environment — primary entry point
+├── assets
+│   └── demo_output.mp4
 ├── requirements.txt             # Fallback: pip-based dependency resolution
 ├── README.md                    # Project documentation
-├──
 ├── train.py               
 ├── app.py                       # Gradio demo (Hugging Face Spaces)
-├── 
 ├── model/
 │   └── best.pt                  # Final PyTorch weights (Phase 3, 1024px input)
 │   └── best_fp16.engine 
-├── 
 ├── inference/
 │   ├── infer.py                 # PyTorch inference: images, video, webcam
 │   ├── infer_trt.py             # TensorRT-optimized inference (GPU only)
 │   └── _common.py               # Shared post-processing & visualization utilities
-├── 
 ├── config/
 │   ├── deploy_config.json       # Runtime thresholds, class mapping, metadata
 │   └── validate.py              # Schema validation for config integrity
-├── 
 └── tests/
     └── test_smoke.py            # CPU-only sanity checks (CI/CD friendly)
 ```
 
 ---
-
-# Auto-generate structure snippet (exclude noise)
-tree -I '.git|.venv|__pycache__|*.engine' --dirsfirst -L 2
 
 ## Training
 
