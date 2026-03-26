@@ -58,8 +58,7 @@ For real-time use, see [Quick Start](#quick-start).
 [![Input](https://img.youtube.com/vi/1PXWfTKSMkM/0.jpg)](https://www.youtube.com/shorts/1PXWfTKSMkM)
 
 **YOLO26x detections**
-https://github.com/user-attachments/assets/ffa2e47d-bd3b-4e57-be44-c952fb0af09d
-
+**YOLO26x detections** → [Watch output video](assets/demo_output.mp4)
 
 ---
 
