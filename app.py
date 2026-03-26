@@ -5,7 +5,7 @@ Deploy at: https://huggingface.co/spaces/HaiderKhan6410/weapon-yolo26x-demo
 
 from __future__ import annotations
 
-import os
+import subprocess
 import tempfile
 import time
 from collections import defaultdict
@@ -36,6 +36,7 @@ model.to(DEVICE)
 print("Model ready.")
 
 # ── class labels ──────────────────────────────────────────────────────────────
+# Keys MUST match exact model output names — do not change these.
 
 CLASS_META = {
     "Blunt_Weapon":  {"icon": "🪓", "color": "#f59e0b", "risk": "MEDIUM"},
@@ -45,6 +46,13 @@ CLASS_META = {
     "Melee_Weapon":  {"icon": "🗡️",  "color": "#f59e0b", "risk": "MEDIUM"},
     "Person":        {"icon": "🧍", "color": "#64748b", "risk": "INFO"},
     "Tool":          {"icon": "🔧", "color": "#22d3ee", "risk": "LOW"},
+}
+
+# UI display names — separate from internal model labels (presentation layer only)
+DISPLAY_NAMES = {
+    "Blunt_Weapon": "Blunt Weapon",
+    "Fire_Smoke":   "Fire / Smoke",
+    "Melee_Weapon": "Melee Weapon",
 }
 
 RISK_ORDER = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3, "INFO": 4}
@@ -84,7 +92,9 @@ def detect_video(
     processed   = 0
     total_time  = 0.0
     last_annotated = None
-    frames_to_process = max(1, total // max(1, frame_skip))
+
+    # FIX: ceiling division so the final partial block is counted correctly
+    frames_to_process = max(1, (total + frame_skip - 1) // max(1, frame_skip))
 
     while True:
         ret, frame = cap.read()
@@ -121,14 +131,29 @@ def detect_video(
     cap.release()
     writer.release()
 
-    # Re-encode with H.264 for browser compatibility
-    h264_path = out_path.replace(".mp4", "_h264.mp4")
-    ret_code = os.system(
-        f'ffmpeg -y -i "{out_path}" -vcodec libx264 -acodec aac "{h264_path}" -loglevel quiet'
-    )
-    final_path = h264_path if ret_code == 0 and Path(h264_path).exists() else out_path
+    # FIX: guard against zero processed frames (corrupted file / extreme frame_skip)
+    if processed == 0:
+        return None, _error_card(
+            "No frames were processed. Try lowering Frame Skip or check the video file."
+        )
 
-    avg_ms = (total_time / processed * 1000) if processed > 0 else 0.0
+    # Re-encode with H.264 for browser compatibility — FIX: use subprocess, not os.system
+    h264_path = out_path.replace(".mp4", "_h264.mp4")
+    result = subprocess.run(
+        [
+            "ffmpeg", "-y", "-i", out_path,
+            "-vcodec", "libx264", "-acodec", "aac",
+            h264_path, "-loglevel", "quiet",
+        ],
+        check=False,
+    )
+    final_path = (
+        h264_path
+        if result.returncode == 0 and Path(h264_path).exists()
+        else out_path
+    )
+
+    avg_ms = total_time / processed * 1000
     summary_html = _build_summary_html(
         total, processed, frame_skip, avg_ms, dur_s,
         width, height, fps, all_counts, show_conf
@@ -210,6 +235,10 @@ def _build_summary_html(
             avg_c   = sum(confs) / count
             max_c   = max(confs)
             bar_w   = int(avg_c * 100)
+
+            # FIX: map internal model label → clean UI display name (presentation layer only)
+            display_label = DISPLAY_NAMES.get(label, label.replace("_", " "))
+
             conf_block = f"""
   <div class="conf-bar-wrap" title="avg {avg_c:.2f} | max {max_c:.2f}">
     <div class="conf-bar" style="width:{bar_w}%; background:{color};"></div>
@@ -220,7 +249,7 @@ def _build_summary_html(
 <div class="detect-row">
   <div class="detect-icon">{icon}</div>
   <div class="detect-info">
-    <div class="detect-label">{label}</div>
+    <div class="detect-label">{display_label}</div>
     <span class="risk-badge risk-{risk.lower()}">{risk}</span>
   </div>
   <div class="detect-count">×{count}</div>
@@ -302,6 +331,12 @@ footer { display: none !important; }
   color: var(--text-sec);
   letter-spacing: 0.1em;
 }
+.header-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
 .header-badge {
   display: inline-flex;
   align-items: center;
@@ -313,7 +348,18 @@ footer { display: none !important; }
   font-size: 10px;
   padding: 4px 10px;
   border-radius: 2px;
-  margin-top: 12px;
+}
+.header-badge-warn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(245,158,11,0.08);
+  border: 1px solid rgba(245,158,11,0.3);
+  color: #f59e0b;
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 4px 10px;
+  border-radius: 2px;
 }
 .status-dot {
   width: 6px; height: 6px;
@@ -554,6 +600,11 @@ input[type=range]::-webkit-slider-runnable-track { background: var(--border) !im
   color: var(--text-muted);
   letter-spacing: 0.1em;
 }
+.footer-left a {
+  color: var(--text-sec);
+  text-decoration: none;
+}
+.footer-left a:hover { color: var(--accent); }
 .footer-right {
   display: flex;
   gap: 12px;
@@ -604,23 +655,27 @@ examples = [
 
 # ── UI ────────────────────────────────────────────────────────────────────────
 
-HEADER_HTML = """
+HEADER_HTML = f"""
 <div class="header-wrap">
-  <div class="header-eyebrow">AI-POWERED THREAT ANALYSIS SYSTEM</div>
-  <div class="header-title">WEAPON <span>DETECT</span></div>
+  <div class="header-title">YOLO26x Threat <span>Detection</span></div>
   <div class="header-sub">YOLO26X · mAP@50 = 0.8913 · 104,697 TRAINING IMAGES · 7 CLASSES</div>
-  <div>
-    <span class="header-badge">
-      <span class="status-dot"></span>
-      MODEL ACTIVE
-    </span>
+  <div class="header-badges">
+    <div class="header-badge-warn">
+      ⚠ Not a safety-critical system — human review required
+    </div>
   </div>
 </div>
 """
 
+# FIX: correct OpenRAIL-M license link (was pointing to wrong HF page)
 FOOTER_HTML = """
 <div class="footer-strip">
-  <div class="footer-left">© HaiderKhan6410 · WEAPON-YOLO26X · CC0 LICENSE</div>
+  <div class="footer-left">
+    © HaiderKhan6410 · WEAPON-YOLO26X ·
+    <a href="https://huggingface.co/spaces/bigscience/openrail" target="_blank" rel="noopener">
+      BigScience OpenRAIL-M
+    </a> · Use subject to OpenRAIL-M restrictions
+  </div>
   <div class="footer-right">
     <a class="footer-link" href="https://huggingface.co/HaiderKhan6410/weapon-yolo26x" target="_blank" rel="noopener">
       ↗ MODEL ON HF
@@ -634,11 +689,11 @@ FOOTER_HTML = """
   </div>
 </div>
 <div class="class-strip">
-  <span class="class-pill">🪓 BLUNT_WEAPON</span>
+  <span class="class-pill">🪓 BLUNT WEAPON</span>
   <span class="class-pill">💣 EXPLOSIVE</span>
-  <span class="class-pill">🔥 FIRE_SMOKE</span>
+  <span class="class-pill">🔥 FIRE / SMOKE</span>
   <span class="class-pill">🔫 FIREARM</span>
-  <span class="class-pill">🗡️ MELEE_WEAPON</span>
+  <span class="class-pill">🗡️ MELEE WEAPON</span>
   <span class="class-pill">🧍 PERSON</span>
   <span class="class-pill">🔧 TOOL</span>
 </div>
@@ -675,19 +730,22 @@ with gr.Blocks(
                 inp_conf = gr.Slider(
                     minimum=0.10, maximum=0.90,
                     value=CONF_DEFAULT, step=0.05,
-                    label="Confidence Threshold",
-                    info="Lower → more detections (higher false-positive rate)",
+                    label="Confidence Threshold (0–1)",
+                    # FIX: show both directions so users understand the trade-off
+                    info="Lower → more detections (↑ false positives) | Higher → fewer detections (↑ missed detections)",
                 )
                 inp_iou = gr.Slider(
                     minimum=0.10, maximum=0.90,
                     value=IOU_DEFAULT, step=0.05,
-                    label="IoU / NMS Threshold",
-                    info="Lower → suppress more overlapping boxes",
+                    label="IoU / NMS Threshold (0–1)",
+                    # FIX: clearer wording for both directions
+                    info="Lower → more aggressive suppression (fewer overlapping boxes) | Higher → keeps more overlapping detections",
                 )
                 inp_frame_skip = gr.Slider(
                     minimum=1, maximum=10, value=2, step=1,
-                    label="Frame Skip  (process every N-th frame)",
-                    info="Higher → faster run, lower temporal precision",
+                    label="Frame Skip (process every N-th frame)",
+                    # FIX: warn about missing brief events
+                    info="Higher → faster processing, but may miss brief events between frames",
                 )
                 inp_show_conf = gr.Checkbox(
                     value=True,
