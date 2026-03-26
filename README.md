@@ -32,6 +32,23 @@ The training pipeline is the main contribution here. Most public YOLO uploads ar
 
 ---
 
+## 🎥 Demo
+
+### Original footage
+[![Input](https://img.youtube.com/vi/1PXWfTKSMkM/0.jpg)](https://www.youtube.com/shorts/1PXWfTKSMkM)
+
+### YOLO26x detection output
+https://github.com/user-attachments/assets/ffa2e47d-bd3b-4e57-be44-c952fb0af09d
+
+---
+
+
+
+
+
+
+
+
 ## Numbers
 
 ### Final (Phase 3 checkpoint, TTA validated)
