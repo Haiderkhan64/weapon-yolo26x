@@ -14,7 +14,7 @@ language:
   - en
 ---
 
-# Weapon Detection — YOLO26x
+# Weapon Detection YOLO26x
 
 A 7-class weapon detector trained on 104,697 images using a 4-phase progressive fine-tuning pipeline. Final mAP@50 of **0.8913** with TTA. TensorRT FP16 export runs at ~5ms/image on H100.
 
@@ -26,7 +26,7 @@ This README documents exactly what was done, why each decision was made, what th
 
 A fine-tuned [YOLO26x](https://github.com/ultralytics/ultralytics) checkpoint for detecting weapons and related threat objects in images and video. The seven classes are: `Blunt Weapon`, `Explosive`, `Fire Smoke`, `Firearm`, `Melee_Weapon`, `Person`, `Tool`.
 
-`Person` is intentionally included as a context class, not a standalone person detector. Its lower mAP@50 (0.747) is expected — person annotations in the dataset are sparse and only label people in weapon-adjacent scenes. Don't use this model as a people counter.
+`Person` is intentionally included as a context class, not a standalone person detector. Its lower mAP@50 (0.747) is expected person annotations in the dataset are sparse and only label people in weapon-adjacent scenes. Don't use this model as a people counter.
 
 The training pipeline is the main contribution here. Most public YOLO uploads are a single training run with default hyperparameters. This one uses a 4-phase curriculum that addresses two real problems: catastrophic gradient updates from mosaic augmentation on background-heavy data early in training, and the resolution gap between pretraining (640px) and deployment (1024px). Details in the [Training](#training) section.
 
@@ -40,7 +40,7 @@ Upload a video, adjust confidence and IoU thresholds, get annotated output with 
 
 **7 classes:** Blunt Weapon · Explosive · Fire/Smoke · Firearm · Melee Weapon · Person · Tool
 
-> **Speed warning:** The Space runs CPU-only (free HF tier). Expect 1–5s/image. Not a model issue — re-export and run locally if you need real throughput.
+> **Speed warning:** The Space runs CPU-only (free HF tier). Expect 1–5s/image. Not a model issue re-export and run locally if you need real throughput.
 
 | Environment | Latency |
 |---|---|
@@ -92,16 +92,16 @@ https://github.com/user-attachments/assets/ffa2e47d-bd3b-4e57-be44-c952fb0af09d
 | Fire_Smoke | 0.879 | 0.802 | **0.875** |
 | Person | 0.794 | 0.641 | 0.747 |
 
-The high numbers on Explosive and Melee_Weapon are partly a dataset artifact — those classes have distinctive visual signatures (grenades, blades) relative to their backgrounds. Firearm at 0.932 is more meaningful because firearms appear in more varied contexts with more partial occlusions.
+The high numbers on Explosive and Melee_Weapon are partly a dataset artifact those classes have distinctive visual signatures (grenades, blades) relative to their backgrounds. Firearm at 0.932 is more meaningful because firearms appear in more varied contexts with more partial occlusions.
 
 ### Phase progression
 
 | Phase | Epochs | imgsz | Frozen layers | mAP@50 |
 |---|---|---|---|---|
-| 1 — Stabilization | 10 | 800 | 10 | 0.865 |
-| 2 — Full backbone | 15 | 800 | 0 | 0.881 |
-| 3 — High-res refinement | 10 | 1024 | 0 | 0.891 |
-| 4 — TTA validation | — | 1024 | — | **0.8913** |
+| 1 Stabilization | 10 | 800 | 10 | 0.865 |
+| 2 Full backbone | 15 | 800 | 0 | 0.881 |
+| 3 High-res refinement | 10 | 1024 | 0 | 0.891 |
+| 4 TTA validation | — | 1024 | — | **0.8913** |
 
 The +1.6% jump from Phase 2→3 comes entirely from the resolution increase. Small objects (knives at distance, grenade pins) that were borderline at 800px become unambiguous at 1024px. This is consistent with what you'd expect from the receptive field math.
 
@@ -144,7 +144,7 @@ model = YOLO("model/best.pt")
 results = model("image.jpg", conf=0.35, iou=0.45, imgsz=1024)
 results[0].show()
 
-# Video — stream=True is important, loads one frame at a time
+# Video stream=True is important, loads one frame at a time
 for r in model("video.mp4", conf=0.35, iou=0.45, imgsz=1024, stream=True):
     print(r.boxes)
 ```
@@ -180,7 +180,7 @@ python inference/infer.py --source 0 --no-save --show
 
 ```
 .
-├── flake.nix / flake.lock       # Reproducible Nix dev environment — primary entry point
+├── flake.nix / flake.lock       # Reproducible Nix dev environment primary entry point
 ├── assets
 │   └── demo_output.mp4
 ├── requirements.txt             # Fallback: pip-based dependency resolution
@@ -226,21 +226,21 @@ Fine-tuning YOLO26x from scratch (i.e., with a single `model.train()` call at 10
 
 ### Phase details
 
-**Phase 1 — Stabilization (10 epochs, 800px)**
+**Phase 1 Stabilization (10 epochs, 800px)**
 
 Freeze the first 10 backbone layers. Only the neck and head train. `AdamW` with `lr0=8e-5`, no mixup, no copy_paste. Light augmentation (`degrees=10`, `scale=0.5`, `erasing=0.3`). This gets the head calibrated without corrupting the pretrained backbone features. Loss is stable from epoch 1.
 
-**Phase 2 — Full backbone (15 epochs, 800px)**
+**Phase 2 Full backbone (15 epochs, 800px)**
 
 Unfreeze everything. Drop LR to `5e-5`. Add `mixup=0.15` and `copy_paste=0.3`. These two augmentations are high-value for weapon detection specifically: mixup teaches the model to handle overlapping weapon/person scenes, copy_paste synthesizes uncommon weapon-in-new-context combinations that the dataset underrepresents. `degrees=12`, `scale=0.6` — heavier geometric augmentation now that the backbone is stable enough to handle it.
 
-**Phase 3 — High-res refinement (10 epochs, 1024px)**
+**Phase 3 High-res refinement (10 epochs, 1024px)**
 
-Load Phase 2 `best.pt`. Drop batch from 32→12 to fit H100 memory at 1024px. `lr0=2e-5` — very conservative, we're making fine adjustments to existing good features, not relearning. Reduce mosaic to 0.8 (full mosaic at 1024px is expensive and we're in a refinement phase). This phase's job is purely recall improvement on small objects. It does exactly that: recall goes from 0.808 → 0.819.
+Load Phase 2 `best.pt`. Drop batch from 32→12 to fit H100 memory at 1024px. `lr0=2e-5` very conservative, we're making fine adjustments to existing good features, not relearning. Reduce mosaic to 0.8 (full mosaic at 1024px is expensive and we're in a refinement phase). This phase's job is purely recall improvement on small objects. It does exactly that: recall goes from 0.808 → 0.819.
 
-**Phase 4 — Export**
+**Phase 4 Export**
 
-TTA validation with `augment=True`, `conf=0.001`, `iou=0.6`. TTA adds ~3× inference cost but gives a more honest mAP estimate than single-pass. The TRT export took 447s on H100 — this is normal for a workspace=6GB, half=True, imgsz=1024 build.
+TTA validation with `augment=True`, `conf=0.001`, `iou=0.6`. TTA adds ~3× inference cost but gives a more honest mAP estimate than single-pass. The TRT export took 447s on H100 this is normal for a workspace=6GB, half=True, imgsz=1024 build.
 
 ### Hyperparameter table
 
@@ -316,7 +316,7 @@ To be honest about what this model doesn't do well.
 
 **Low-light degrades recall meaningfully.** The dataset skews toward daylight/indoor security footage. Dark scenes drop recall on Melee_Weapon and Blunt_Weapon noticeably. No quantified benchmarks for this yet.
 
-**Extreme occlusion is hard.** A half-visible handgun behind a jacket will likely be missed. The model has no depth or shape-completion capability — it's purely 2D texture-and-shape matching.
+**Extreme occlusion is hard.** A half-visible handgun behind a jacket will likely be missed. The model has no depth or shape-completion capability it's purely 2D texture-and-shape matching.
 
 **The `.engine` file is H100-specific.** TensorRT engines are not portable across GPU architectures. Re-export from `best.pt` for any other GPU. The re-export takes ~8 minutes on a T4, ~15 minutes on an older V100.
 
@@ -346,7 +346,7 @@ nix develop
 nix develop .#download
 ```
 
-Python 3.12 is pinned — 3.13 is excluded because NumPy 1.26.x dropped Py3.13 support and ultralytics 8.3 hasn't been verified against NumPy 2.x.
+Python 3.12 is pinned 3.13 is excluded because NumPy 1.26.x dropped Py3.13 support and ultralytics 8.3 hasn't been verified against NumPy 2.x.
 
 The pip venv is intentional. Torch and TensorRT are too GPU-specific and too large to package cleanly in nixpkgs. Nix provides the Python interpreter and system libs (libstdc++, libGL, glib); pip owns the ML stack inside `.venv/`.
 
