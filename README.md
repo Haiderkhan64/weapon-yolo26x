@@ -232,7 +232,7 @@ Freeze the first 10 backbone layers. Only the neck and head train. `AdamW` with 
 
 **Phase 2 Full backbone (15 epochs, 800px)**
 
-Unfreeze everything. Drop LR to `5e-5`. Add `mixup=0.15` and `copy_paste=0.3`. These two augmentations are high-value for weapon detection specifically: mixup teaches the model to handle overlapping weapon/person scenes, copy_paste synthesizes uncommon weapon-in-new-context combinations that the dataset underrepresents. `degrees=12`, `scale=0.6` — heavier geometric augmentation now that the backbone is stable enough to handle it.
+Unfreeze everything. Drop LR to `5e-5`. Add `mixup=0.15` and `copy_paste=0.3`. These two augmentations are high-value for weapon detection specifically: mixup teaches the model to handle overlapping weapon/person scenes, copy_paste synthesizes uncommon weapon-in-new-context combinations that the dataset underrepresents. `degrees=12`, `scale=0.6` heavier geometric augmentation now that the backbone is stable enough to handle it.
 
 **Phase 3 High-res refinement (10 epochs, 1024px)**
 
