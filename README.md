@@ -72,6 +72,8 @@ Raw source data from Roboflow Universe (76 heterogeneous classes) was consolidat
 
 Net annotation delta: 302,550 → 294,950 (−7,600), fully accounted for by removed duplicates and degenerate boxes.
 
+---
+
 ## Live Demo
 
 [![Open in Spaces](https://img.shields.io/badge/🤗%20Open%20in%20Spaces-weapon--yolo26x--demo-yellow)](https://huggingface.co/spaces/HaiderKhan6410/weapon-yolo26x-demo)
