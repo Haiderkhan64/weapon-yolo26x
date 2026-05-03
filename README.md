@@ -32,6 +32,46 @@ The training pipeline is the main contribution here. Most public YOLO uploads ar
 
 ---
 
+## Dataset
+
+**Weapons-130K** · [Kaggle](https://www.kaggle.com/datasets/haiderkhan6410/weapons-130k) · CC BY 4.0
+
+| Property | Value |
+|---|---|
+| Total images | 130,763 |
+| Total annotations | 294,950 |
+| Train / Val / Test | 104,697 / 13,186 / 12,880 |
+| Image size | 800 × 800 px |
+| Format | YOLO bounding box (normalized `class cx cy w h`) |
+| Background frames | 12,342 (9.9% intentionally retained) |
+
+### Class distribution
+
+| ID | Class | Annotations | Share |
+|---|---|---|---|
+| 0 | Blunt_Weapon | 9,527 | 3.2% |
+| 1 | Explosive | 25,599 | 8.7% |
+| 2 | Fire_Smoke | 78,171 | 26.5% |
+| 3 | Firearm | 117,864 | 39.9% |
+| 4 | Melee_Weapon | 40,166 | 13.6% |
+| 5 | Person | 11,801 | 4.0% |
+| 6 | Tool | 11,822 | 4.0% |
+
+The dataset is imbalanced by design. Firearm and Fire_Smoke dominate because these are the most common signals in real surveillance footage. If your use case requires class balance, apply weighted loss or oversample minority classes.
+
+### Cleaning pipeline
+
+Raw source data from Roboflow Universe (76 heterogeneous classes) was consolidated and cleaned in 4 audited stages before training:
+
+1. **Annotation repair** 1,052 segmentation polygon lines stripped and converted to bbox format across 772 files.
+2. **Deduplication** 5,169 near-duplicate images removed via perceptual hashing (per-split, not global, to prevent cross-split leakage).
+3. **Degenerate bbox removal** 153 zero-area or out-of-bounds boxes dropped; these cause NaN losses under AMP.
+4. **Background frame audit** 12,342 empty-label frames confirmed as genuine negatives and retained. A detector trained without background frames learns to always predict something; on real CCTV feeds where most frames are weapon-free, this produces unacceptable false-positive rates.
+
+**Integrity checks (all passed):** zero corrupt images · zero out-of-bounds coordinates · zero orphan labels · zero missing labels · zero invalid class IDs.
+
+Net annotation delta: 302,550 → 294,950 (−7,600), fully accounted for by removed duplicates and degenerate boxes.
+
 ## Live Demo
 
 [![Open in Spaces](https://img.shields.io/badge/🤗%20Open%20in%20Spaces-weapon--yolo26x--demo-yellow)](https://huggingface.co/spaces/HaiderKhan6410/weapon-yolo26x-demo)
