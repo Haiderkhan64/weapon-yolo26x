@@ -7,23 +7,23 @@ curriculum. This directory contains training configs and metrics for Phases 2 & 
 
 | Phase | Epochs | imgsz | Frozen Layers | Files |
 |-------|--------|-------|---------------|-------|
-| 2 — Full Backbone | 15 | 800 | 0 | args.yaml, results.csv |
-| 3 — High-Res | 10 | 1024 | 0 | args.yaml, results.csv |
+| 2 — Full Backbone | 5 | 800 | 0 | args.yaml, results.csv |
+| 3 — High-Res | 5 | 1024 | 0 | args.yaml, results.csv |
 
 > **Note:** Phase 1 artifacts were not retained. Phase 2 was initialized from
 > the standard YOLOv8x COCO-pretrained checkpoint.
 
-## Weights
+## Results
 
-Hosted on Hugging Face due to file size:
+| Phase | val mAP@50 | val mAP@50-95 |
+|-------|------------|---------------|
+| 1 | 0.650 | 0.439 |
+| 2 | 0.750 | 0.536 |
+| 3 (val) | 0.775 | 0.556 |
+| 3 (test) | 0.785 | 0.567 |
 
-- Phase 2: `HaiderKhan6410/yolov8x-baseline` → `phase2/best.pt`
-- Phase 3: `HaiderKhan6410/yolov8x-baseline` → `phase3/best.pt`
-
-```bash
-from huggingface_hub import hf_hub_download
-path = hf_hub_download("HaiderKhan6410/yolov8x-baseline", "phase3/best.pt")
-```
+> YOLOv8x ran 5 epochs/phase vs 10 for YOLO26x due to compute constraints.
+> Validation mAP plateaued by epoch 5, confirming convergence.
 
 ## Reproducing
 
