@@ -142,10 +142,10 @@ A YOLOv8x model was trained on the same dataset and curriculum to isolate
 backbone depth as the sole variable. Full configs and per-epoch metrics are in
 [`baselines/yolov8x_comparison/`](baselines/yolov8x_comparison/).
 
-| Model | mAP@50 | Δ vs YOLO26x |
-|-------|--------|--------------|
-| YOLOv8x (baseline) | 0.775 | — |
-| YOLO26x (ours) | 0.891 | **+11.6 pp** |
+| Model | Phase 3 val mAP@50 | Phase 3 test mAP@50 | Δ vs YOLO26x |
+|-------|-------------------|---------------------|--------------|
+| YOLOv8x (baseline, 5 epochs/phase) | 0.775 | 0.785 | — |
+| YOLO26x (ours, 10 epochs/phase) | 0.891 | 0.892 | **+11.6 pp** |
 
 ### Phase progression
 
