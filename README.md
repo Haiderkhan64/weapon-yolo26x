@@ -236,6 +236,11 @@ python inference/infer.py --source 0 --no-save --show
 ├── flake.nix / flake.lock       # Reproducible Nix dev environment primary entry point
 ├── assets
 │   └── demo_output.mp4
+├── baselines/
+│   └── yolov8x_comparison/     # YOLOv8x controlled baseline
+│       ├── phase2/              # args.yaml, results.csv
+│       ├── phase3/              # args.yaml, results.csv
+│       └── README.md
 ├── requirements.txt             # Fallback: pip-based dependency resolution
 ├── README.md                    # Project documentation
 ├── train.py               
