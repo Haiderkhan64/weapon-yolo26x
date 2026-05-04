@@ -7,11 +7,14 @@ curriculum. This directory contains training configs and metrics for Phases 2 & 
 
 | Phase | Epochs | imgsz | Frozen Layers | Files |
 |-------|--------|-------|---------------|-------|
+| 1 — Stabilization | 5 | 800 | 10 | not retained |
 | 2 — Full Backbone | 5 | 800 | 0 | args.yaml, results.csv |
 | 3 — High-Res | 5 | 1024 | 0 | args.yaml, results.csv |
 
-> **Note:** Phase 1 artifacts were not retained. Phase 2 was initialized from
-> the standard YOLOv8x COCO-pretrained checkpoint.
+> **Phase 1 note:** Phase 1 ran for 5 epochs with the first 10 backbone layers
+> frozen (`freeze=10`), stabilizing the detection head before full fine-tuning.
+> Weights were not saved — Phase 2 was initialized from Phase 1's best.pt
+> during the same Kaggle session. Phase 1 val mAP@50 = **0.650**.
 
 ## Results
 
