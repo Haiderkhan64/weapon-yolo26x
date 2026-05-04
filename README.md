@@ -136,6 +136,17 @@ https://github.com/user-attachments/assets/ffa2e47d-bd3b-4e57-be44-c952fb0af09d
 
 The high numbers on Explosive and Melee_Weapon are partly a dataset artifact those classes have distinctive visual signatures (grenades, blades) relative to their backgrounds. Firearm at 0.932 is more meaningful because firearms appear in more varied contexts with more partial occlusions.
 
+## Controlled Baseline
+
+A YOLOv8x model was trained on the same dataset and curriculum to isolate
+backbone depth as the sole variable. Full configs and per-epoch metrics are in
+[`baselines/yolov8x_comparison/`](baselines/yolov8x_comparison/).
+
+| Model | mAP@50 | Δ vs YOLO26x |
+|-------|--------|--------------|
+| YOLOv8x (baseline) | 0.775 | — |
+| YOLO26x (ours) | 0.891 | **+11.6 pp** |
+
 ### Phase progression
 
 | Phase | Epochs | imgsz | Frozen layers | mAP@50 |
