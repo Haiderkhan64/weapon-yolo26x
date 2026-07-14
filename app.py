@@ -1,8 +1,7 @@
 from __future__ import annotations
-
+import spaces
 import os
-
-os.environ['YOLO_CONFIG_DIR'] = "/tmp/Ultralytics"
+os.environ['YOLO_CONFIG_DIR'] = '/tmp/Ultralytics'
 
 import subprocess
 import tempfile
@@ -28,10 +27,9 @@ IMGSZ        = 1024
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-print(f"Loading model on {DEVICE.upper()} …")
+print("Loading model …")
 _model_path = hf_hub_download(repo_id=MODEL_REPO, filename=MODEL_FILE)
 model = YOLO(_model_path)
-model.to(DEVICE)
 print("Model ready.")
 
 # ── class labels ──────────────────────────────────────────────────────────────
@@ -57,7 +55,7 @@ DISPLAY_NAMES = {
 RISK_ORDER = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3, "INFO": 4}
 
 # ── inference ─────────────────────────────────────────────────────────────────
-
+@spaces.GPU(duration=60)
 def detect_video(
     video_path: str,
     conf:       float,
@@ -66,6 +64,7 @@ def detect_video(
     frame_skip: int,
     progress=gr.Progress(track_tqdm=True),
 ) -> tuple[str, str]:
+    model.to(DEVICE)
     if video_path is None:
         return None, _error_card("No video provided. Please upload a video file first.")
 
@@ -654,7 +653,7 @@ examples = [
 
 # ── UI ────────────────────────────────────────────────────────────────────────
 
-HEADER_HTML = """
+HEADER_HTML = f"""
 <div class="header-wrap">
   <div class="header-title">YOLO26x <span>Threat Detection</span></div>
   <div class="header-sub">YOLO26X · mAP@50 = 0.8913 · 104,697 TRAINING IMAGES · 7 CLASSES</div>
