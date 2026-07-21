@@ -653,7 +653,7 @@ examples = [
 
 # ── UI ────────────────────────────────────────────────────────────────────────
 
-HEADER_HTML = f"""
+HEADER_HTML = """
 <div class="header-wrap">
   <div class="header-title">YOLO26x <span>Threat Detection</span></div>
   <div class="header-sub">YOLO26X · mAP@50 = 0.8913 · 104,697 TRAINING IMAGES · 7 CLASSES</div>
