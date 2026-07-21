@@ -1,6 +1,7 @@
 from __future__ import annotations
-import spaces
+
 import os
+
 os.environ['YOLO_CONFIG_DIR'] = '/tmp/Ultralytics'
 
 import subprocess
@@ -11,6 +12,7 @@ from pathlib import Path
 
 import cv2
 import gradio as gr
+import spaces
 import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
